@@ -6,7 +6,7 @@
 import { getClient } from './supabase.js';
 import { CONFIG } from '../config.js';
 
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/livekit-client@2/+esm';
+const SDK_URL = 'https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/+esm';
 let LK = null;
 
 async function sdk() {

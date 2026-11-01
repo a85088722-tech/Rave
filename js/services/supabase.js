@@ -4,7 +4,7 @@
  */
 import { CONFIG } from '../config.js';
 
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const SDK_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm';
 let clientPromise = null;
 
 export function getClient() {

@@ -100,24 +100,31 @@ function end(reason) {
 }
 
 async function goLive() {
+  const callId = current.id;
+  const stillThis = () => current && current.id === callId;
   current.state = 'connecting'; render();
   pauseVideo();
   try {
-    call = await joinCall({
+    const joined = await joinCall({
       video: current.kind === 'video',
       handlers: {
         onRemoteTrack: (track, kind) => {
+          if (!stillThis()) return;
           const el = track.attach();
           el.setAttribute('playsinline', '');
           if (kind === 'video') { el.className = 'call-remote-video'; current.hasRemoteVideo = true; }
           remoteEls.push(el);
           render();
         },
-        onRemoteGone: () => end('Appel terminé'),
+        onRemoteGone: () => { if (stillThis()) end('Appel terminé'); },
         onState: setStatus,
-        onEnded: () => { if (current) end('Appel terminé'); }
+        onEnded: () => { if (stillThis() && current.state === 'live') end('Appel terminé'); }
       }
     });
+    // Raccroché (ou appel annulé par l'autre) pendant la connexion : on quitte la salle,
+    // sinon le micro restait ouvert sans aucun écran d'appel.
+    if (!stillThis()) { try { joined.leave(); } catch (e) { /* rien */ } return; }
+    call = joined;
     current.state = 'live'; current.mic = true; current.cam = current.kind === 'video';
     const t0 = Date.now();
     clock = setInterval(() => {
@@ -127,8 +134,10 @@ async function goLive() {
     }, 1000);
     render();
   } catch (e) {
-    broadcast('call:end', { id: current && current.id });
-    end(e.message);
+    // L'identifiant est gardé à part : current peut déjà être vide ici, et l'autre
+    // téléphone ne recevait alors jamais la fin d'appel.
+    broadcast('call:end', { id: callId });
+    if (stillThis()) end(e.message);
   }
 }
 

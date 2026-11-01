@@ -176,25 +176,35 @@ function loadApi() {
   return ytReady;
 }
 
+let ytCreated = null; // promesse résolue quand le lecteur est prêt (onReady)
 async function ensurePlayer(videoId, start, autoplay) {
   ensureHost();
   if (CONFIG.DEMO) return;
   await loadApi();
-  if (!yt) {
-    await new Promise(res => {
+  if (!ytCreated) {
+    ytCreated = new Promise(res => {
       yt = new YT.Player('ytFrame', {
         videoId, width: '100%', height: '100%',
         playerVars: { playsinline: 1, rel: 0, modestbranding: 1, autoplay: autoplay ? 1 : 0, start: Math.floor(start || 0) },
         events: { onReady: () => res(), onStateChange: onYtState }
       });
     });
+    await ytCreated;
     return;
   }
+  // Le lecteur peut exister sans être prêt (2ᵉ vidéo reçue pendant le chargement) :
+  // ses méthodes (loadVideoById…) n'existent qu'après onReady.
+  await ytCreated;
+  if (!P.item || P.item.id !== videoId) return; // une autre vidéo a été demandée entre-temps
   if (autoplay) yt.loadVideoById({ videoId, startSeconds: start || 0 });
   else yt.cueVideoById({ videoId, startSeconds: start || 0 });
 }
 
 const ok = () => !!(yt && yt.getPlayerState);
+const validId = id => typeof id === 'string' && /^[\w-]{11}$/.test(id);
+// Temps écoulé depuis l'envoi d'un ordre. Les horloges des deux téléphones peuvent différer :
+// on borne la correction pour ne pas sauter de plusieurs minutes.
+const lag = at => Math.min(5, Math.max(0, (Date.now() - (+at || Date.now())) / 1000));
 const curTime = () => (CONFIG.DEMO ? P.pos : ok() ? yt.getCurrentTime() : 0);
 const wasJustHidden = () => document.hidden || Date.now() - hiddenAt < 1500;
 
@@ -287,9 +297,10 @@ export function position() { return { pos: curTime(), dur: CONFIG.DEMO ? P.dur :
 function sameItem(m) { return P.item && m.id === P.item.id; }
 
 onBroadcast('yt:load', m => {
+  if (!m.item || !validId(m.item.id)) return;
   controller = false;
   toast(`${state.partner.name} a lancé ${m.src === 'music' ? 'un morceau' : 'une vidéo'}`);
-  play(m.item, { src: m.src, time: m.time || 0, autoplay: m.playing !== false, silent: true });
+  play(m.item, { src: m.src === 'music' ? 'music' : 'video', time: (+m.time || 0) + (m.playing !== false ? lag(m.at) : 0), autoplay: m.playing !== false, silent: true });
 });
 
 onBroadcast('yt:play', m => {
@@ -298,7 +309,7 @@ onBroadcast('yt:play', m => {
   if (CONFIG.DEMO) { P.pos = m.time; P.playing = true; changed(); return; }
   if (!ok()) return;
   suppressUntil = Date.now() + 1500;
-  const t = m.time + (Date.now() - m.at) / 1000;
+  const t = (+m.time || 0) + lag(m.at);
   if (Math.abs(yt.getCurrentTime() - t) > 1) yt.seekTo(t, true);
   yt.playVideo();
   needsTapCheck(t, true);
@@ -315,14 +326,17 @@ onBroadcast('yt:pause', m => {
   if (Math.abs(yt.getCurrentTime() - m.time) > 0.5) yt.seekTo(m.time, true);
 });
 
-onBroadcast('yt:tick', m => {
-  if (!sameItem(m) || CONFIG.DEMO || !ok() || pending) return;
+/** Aligne ce téléphone sur l'état de l'autre (position, lecture ou pause). */
+function applyTick(m) {
+  if (CONFIG.DEMO || !ok() || pending) return;
   const st = yt.getPlayerState(), localPlaying = st === 1 || st === 3;
-  const t = m.time + (Date.now() - m.at) / 1000;
+  const t = (+m.time || 0) + (m.playing ? lag(m.at) : 0);
   if (m.playing && !localPlaying && st !== -1 && st !== 5) { suppressUntil = Date.now() + 1500; yt.seekTo(t, true); yt.playVideo(); needsTapCheck(t, true); }
   else if (!m.playing && localPlaying) { suppressUntil = Date.now() + 1500; yt.pauseVideo(); }
   else if (m.playing && Math.abs(yt.getCurrentTime() - t) > 2) { suppressUntil = Date.now() + 1500; yt.seekTo(t, true); }
-});
+}
+
+onBroadcast('yt:tick', m => { if (sameItem(m)) applyTick(m); });
 
 // L'autre vient d'arriver : on lui envoie où on en est
 onBroadcast('yt:hello', () => {
@@ -330,20 +344,41 @@ onBroadcast('yt:hello', () => {
   broadcast('yt:state', { src: P.src, item: P.item, time: curTime(), playing: P.playing });
 });
 onBroadcast('yt:state', m => {
-  if (!m.item) return;
-  if (sameItem(m)) { emitTick(m); return; }
-  play(m.item, { src: m.src, time: m.time + (Date.now() - m.at) / 1000, autoplay: m.playing, silent: true });
+  if (!m.item || !validId(m.item.id)) return;
+  // Avant : seule la position était corrigée, pas la lecture/pause (au retour dans l'app,
+  // la vidéo restait en pause alors que l'autre regardait).
+  if (sameItem({ id: m.item.id })) { applyTick({ time: m.time, playing: m.playing, at: m.at }); return; }
+  play(m.item, { src: m.src === 'music' ? 'music' : 'video', time: (+m.time || 0) + (m.playing ? lag(m.at) : 0), autoplay: !!m.playing, silent: true });
 });
-function emitTick(m) { const set = { id: m.item.id, time: m.time, playing: m.playing, at: m.at }; onTick(set); }
-function onTick(m) { /* même logique que yt:tick */ if (!ok() || pending) return; const t = m.time + (Date.now() - m.at) / 1000; if (Math.abs(yt.getCurrentTime() - t) > 2) { suppressUntil = Date.now() + 1500; yt.seekTo(t, true); } }
 
 on('realtime:ready', () => broadcast('yt:hello'));
 on('realtime:resume', () => broadcast('yt:hello'));
 
-// Celui qui a la main envoie sa position toutes les 4 s
+// Celui qui a la main envoie sa position toutes les 4 s.
+// Pas pendant les 6 s qui suivent un retour dans l'app : iOS vient de mettre la vidéo en
+// pause, et on enverrait « pause » à l'autre alors qu'il regarde encore.
+let shownAt = 0;
 tickTimer = setInterval(() => {
-  if (!controller || !P.item || CONFIG.DEMO || document.hidden || !ok()) return;
+  if (!controller || !P.item || CONFIG.DEMO || document.hidden || !ok() || Date.now() - shownAt < 6000) return;
   broadcast('yt:tick', { src: P.src, id: P.item.id, time: curTime(), playing: P.playing });
 }, 4000);
 
-document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenAt = Date.now(); });
+// Arrière-plan : on note où on en était ; au retour, on reprend la lecture qu'iOS a coupée.
+let hiddenSnap = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    hiddenAt = Date.now();
+    hiddenSnap = ok() && P.item ? { id: P.item.id, time: curTime(), playing: P.playing, at: Date.now() } : null;
+    return;
+  }
+  shownAt = Date.now();
+  const snap = hiddenSnap; hiddenSnap = null;
+  if (!snap || !snap.playing || !ok() || !P.item || P.item.id !== snap.id) return;
+  const st = yt.getPlayerState();
+  if (st === 1 || st === 3) return;
+  const t = snap.time + (Date.now() - snap.at) / 1000;
+  suppressUntil = Date.now() + 1500;
+  yt.seekTo(t, true); yt.playVideo();
+  needsTapCheck(t, true);
+  // Si l'autre est connecté, sa réponse à « yt:hello » corrigera la position exacte.
+});

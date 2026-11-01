@@ -31,7 +31,7 @@ export function renderHome(view) {
     const lastOut = state.messages.filter(m => m.from === 'me').slice(-1);
     const msgs = lastIn.concat(lastOut).sort((a, b) => b.at - a.at);
     const mems = state.memories.slice().sort((a, b) => b.at - a.at).slice(0, 3);
-    const unread = state.messages.filter(m => m.from !== 'me' && !m.read).length;
+    const unread = state.messages.filter(m => m.from !== 'me' && !m.read && !m.deleted).length;
 
     view.innerHTML = `
     <div class="page">
@@ -68,7 +68,7 @@ export function renderHome(view) {
 
       ${ev ? `
       <a href="#dates" class="card-grad"><div class="inner row" style="gap:14px">
-        <div class="tile-ic ${EVENT_TYPES[ev.type].cls}">${icon(EVENT_TYPES[ev.type].icon, 20)}</div>
+        <div class="tile-ic ${(EVENT_TYPES[ev.type] || EVENT_TYPES.important).cls}">${icon((EVENT_TYPES[ev.type] || EVENT_TYPES.important).icon, 20)}</div>
         <div class="col grow">
           <span class="kicker">Prochaine date</span>
           <span class="title-sm ellipsis" style="color:var(--text)">${esc(ev.title)}</span>

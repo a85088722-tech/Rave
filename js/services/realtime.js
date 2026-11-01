@@ -33,8 +33,17 @@ export function onTable(table, fn, opts = {}) {
 
 export function isPartnerOnline() { return !!state.partner.online; }
 
-export async function connect() {
-  if (CONFIG.DEMO || !state.couple) return;
+// Une seule connexion à la fois : startSync, le retour dans l'app et le retour du réseau
+// pouvaient lancer connect() en même temps et laisser des canaux en double
+// (messages reçus deux fois, présence faussée).
+let connecting = null;
+export function connect() {
+  if (CONFIG.DEMO || !state.couple) return Promise.resolve();
+  if (!connecting) connecting = doConnect().finally(() => { connecting = null; });
+  return connecting;
+}
+
+async function doConnect() {
   sb = await getClient();
   await disconnect();
   const cid = state.couple.id;
@@ -42,21 +51,24 @@ export async function connect() {
   const { data } = await sb.auth.getSession();
   if (data.session) sb.realtime.setAuth(data.session.access_token);
 
-  channel = sb.channel('couple:' + cid, { config: { private: true, broadcast: { self: false }, presence: { key: state.me.uid } } });
+  const ch = channel = sb.channel('couple:' + cid, { config: { private: true, broadcast: { self: false }, presence: { key: state.me.uid } } });
   channel.on('broadcast', { event: '*' }, ({ event, payload }) => {
-    if (payload && payload.from === state.me.uid) return;
+    if (ch !== channel || !payload || typeof payload !== 'object') return;
+    if (payload.from === state.me.uid) return;
     const set = handlers.get(event);
     if (set) set.forEach(fn => { try { fn(payload); } catch (e) { console.error(e); } });
   });
   channel.on('presence', { event: 'sync' }, () => {
-    const st = channel.presenceState();
+    if (ch !== channel) return;
+    const st = ch.presenceState();
     const online = !!(state.partner.uid && st[state.partner.uid]);
     if (online !== state.partner.online) update('presence', s => { s.partner.online = online; });
     emit('presence', online);
   });
   channel.subscribe(async status => {
+    if (ch !== channel) return;
     if (status === 'SUBSCRIBED') {
-      await channel.track({ uid: state.me.uid, at: Date.now() });
+      await ch.track({ uid: state.me.uid, at: Date.now() });
       emit('realtime:ready');
     }
   });

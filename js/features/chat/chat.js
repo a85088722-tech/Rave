@@ -153,18 +153,27 @@ export function renderChat(view) {
       </form>`;
     bindComposer();
   };
+  let starting = false, cancelWhileStarting = false, disposed = false;
   const startVoice = async () => {
     if (!canRecord()) { toast('Vocaux indisponibles sur cet appareil'); return; }
+    if (starting || recording) return;
+    starting = true; cancelWhileStarting = false;
     try {
       showRecorder();
-      recording = await startRecording({
+      const r = await startRecording({
         onTick: s => { const t = view.querySelector('#recTime'); if (t) t.textContent = fmtDuration(s); },
         onLevel: l => { const d = view.querySelector('#recDot'); if (d) d.style.transform = `scale(${1 + l * 0.8})`; },
         onMax: () => finishVoice(true)
       });
-    } catch (e) { recording = null; restoreComposer(); toast(e.message, 4000); }
+      starting = false;
+      // Annulé (ou écran quitté) pendant la demande d'accès au micro : on coupe tout de suite,
+      // sinon l'enregistrement continuait en arrière-plan.
+      if (cancelWhileStarting || disposed) { r.cancel(); if (!disposed) restoreComposer(); return; }
+      recording = r;
+    } catch (e) { starting = false; recording = null; restoreComposer(); toast(e.message, 4000); }
   };
   const finishVoice = async send => {
+    if (starting) { cancelWhileStarting = true; return; }
     const r = recording; recording = null;
     if (!r) return;
     if (!send) { r.cancel(); restoreComposer(); return; }
@@ -268,5 +277,5 @@ export function renderChat(view) {
     on('change:presence', renderStatus),
     on('change:all', () => renderList())
   ];
-  return () => { offs.forEach(f => f()); if (recording) recording.cancel(); if (audioEl) audioEl.pause(); };
+  return () => { disposed = true; offs.forEach(f => f()); if (recording) recording.cancel(); recording = null; if (audioEl) audioEl.pause(); };
 }

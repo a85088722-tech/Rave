@@ -4,7 +4,7 @@
  * - Mises à jour : la nouvelle version attend que l'utilisateur touche « Mettre à jour ».
  * - Notifications push : affichage + ouverture du chat au toucher.
  */
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 const CACHE = 'duo2-' + VERSION;
 const SHELL = [
   "./",

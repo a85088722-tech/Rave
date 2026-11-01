@@ -21,5 +21,5 @@ export const CONFIG = {
   // Notifications push — clé PUBLIQUE VAPID (la clé privée va dans les secrets Supabase)
   VAPID_PUBLIC_KEY: 'BICY4K2SFwxsbjWMlhbDf1Mlg-_0kG2jOd98B0QCyNF7rkvqe1bYTwn0P5bKDPSLsxtBGL2eTlnndGYwd66ios8',
 
-  APP_VERSION: '2.0.0'
+  APP_VERSION: '2.0.1'
 };

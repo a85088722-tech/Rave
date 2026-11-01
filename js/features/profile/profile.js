@@ -102,7 +102,8 @@ export function openProfile() {
         if (a === 'reset') { resetDemo(); toast('Données d’exemple remises'); close(); }
         if (a === 'logout') {
           if (CONFIG.DEMO) { toast('Dans l’aperçu, la déconnexion ramène à l’accueil'); close(); location.hash = 'accueil'; return; }
-          b.disabled = true; await signOut();
+          b.disabled = true;
+          try { await signOut(); } catch (err) { b.disabled = false; toast('Déconnexion impossible : ' + err.message, 4500); }
         }
         if (a === 'invite') {
           try {
