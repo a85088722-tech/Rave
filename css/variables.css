@@ -1,0 +1,47 @@
+/* Duo 2.0 — jetons de design */
+:root {
+  /* Fonds */
+  --bg: #0A0A0F;
+  --bg-raised: #13121B;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-2: rgba(255, 255, 255, 0.06);
+  --surface-3: rgba(255, 255, 255, 0.1);
+  --bubble: #1A1925;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-soft: rgba(255, 255, 255, 0.06);
+
+  /* Texte */
+  --text: #F5F3FF;
+  --text-2: #D4D4E0;
+  --muted: #A1A1B5;
+  --muted-2: #8A8AA0;
+
+  /* Couleurs de marque */
+  --violet: #8B5CF6;
+  --violet-soft: #C4B5FD;
+  --pink: #EC4899;
+  --pink-soft: #F9A8D4;
+  --grad: linear-gradient(135deg, var(--violet), var(--pink));
+  --grad-soft: linear-gradient(135deg, rgba(139, 92, 246, 0.16), rgba(236, 72, 153, 0.12));
+
+  /* États */
+  --online: #34D399;
+  --danger: #F43F5E;
+  --gold: #FCD34D;
+  --cyan: #67E8F9;
+
+  /* Formes */
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-full: 999px;
+
+  /* Typo */
+  --font: 'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;
+
+  /* Mise en page */
+  --nav-h: 64px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
